@@ -39,9 +39,13 @@ export default function ImageProcessor({
   const [detectionConfidence, setDetectionConfidence] = useState(0.35);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // Load the image
+  // Load the image from the File object directly
   useEffect(() => {
+    if (!file) return;
+    
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
+    
     img.onload = () => {
       imgRef.current = img;
       setOriginalDimensions({ w: img.naturalWidth, h: img.naturalHeight });
@@ -55,19 +59,25 @@ export default function ImageProcessor({
         ctx.drawImage(img, 0, 0);
       }
 
-      setPreviewUrl(processedFile.originalUrl);
+      setPreviewUrl(objectUrl);
       setImageLoaded(true);
 
-      const updateState: ProcessingState = { ...processingState, status: 'idle', progress: 0 };
+      const updateState: ProcessingState = { status: 'idle', progress: 0, message: 'Ready' };
       setProcessingState(updateState);
-      onUpdate({ ...processedFile, processingState: updateState });
+      onUpdate({ ...processedFile, processingState: updateState, originalUrl: objectUrl });
     };
-    img.onerror = () => {
-      setProcessingState({ status: 'error', progress: 0, message: 'Failed to load image' });
+    
+    img.onerror = (e) => {
+      console.error('Image load error:', e);
+      setProcessingState({ status: 'error', progress: 0, message: 'Failed to load image. Please try again.' });
     };
-    // Use the already-created object URL from processedFile
-    img.src = processedFile.originalUrl;
-  }, []); // Only run once on mount
+    
+    img.src = objectUrl;
+    
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
 
   // Auto-detect watermarks
   const handleAutoDetect = async () => {
