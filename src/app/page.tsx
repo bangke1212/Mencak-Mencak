@@ -7,6 +7,7 @@ import FileUploader from '@/components/FileUploader';
 import URLImporter from '@/components/URLImporter';
 import ImageProcessor from '@/components/ImageProcessor';
 import VideoProcessor from '@/components/VideoProcessor';
+import SampleFiles from '@/components/SampleFiles';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -136,9 +137,12 @@ export default function Home() {
         <FileUploader onFileSelect={handleFileSelect} />
 
         {/* Format info */}
-        <p style={{fontSize:12,color:'#aaa',marginTop:16}}>
+        <p style={{fontSize:12,color:'#aaa',marginTop:16,marginBottom:24}}>
           Supported: PNG, JPG, WEBP, BMP, TIFF, MP4, WEBM, MOV, AVI, MKV · Max 50MB
         </p>
+
+        {/* Sample Files */}
+        <SampleFiles onSelect={handleFileSelect} />
       </div>
 
       {/* ===== 3 STEPS ===== */}
