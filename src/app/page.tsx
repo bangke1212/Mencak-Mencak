@@ -8,6 +8,7 @@ import URLImporter from '@/components/URLImporter';
 import ImageProcessor from '@/components/ImageProcessor';
 import VideoProcessor from '@/components/VideoProcessor';
 import SampleFiles from '@/components/SampleFiles';
+import CanvasPolyfill from '@/components/CanvasPolyfill';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -64,6 +65,8 @@ export default function Home() {
   }
 
   return (
+    <>
+    <CanvasPolyfill />
     <div style={{minHeight:'100vh',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",background:'#fff',color:'#111'}}>
       {/* Header */}
       <header style={{borderBottom:'1px solid #f0f0f0',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',maxWidth:1200,margin:'0 auto'}}>
@@ -201,5 +204,6 @@ export default function Home() {
 
       {showURLImport && <URLImporter onFileLoad={handleFileSelect} onClose={() => setShowURLImport(false)} />}
     </div>
+    </>
   );
 }
