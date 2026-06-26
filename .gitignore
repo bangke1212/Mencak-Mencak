@@ -1,0 +1,9 @@
+node_modules/
+.next/
+*.tar.gz
+.env.local
+.cursor/
+.vscode/
+.claude/
+.AGENTS.md
+.CLAUDE.md
