@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { FileType } from '@/types';
-import { detectFileType, validateFileSize, ALLOWED_IMAGE_TYPES, ALLOWED_VIDEO_TYPES } from '@/lib/utils';
+import { detectFileType, validateFileSize, ALLOWED_IMAGE_EXTENSIONS } from '@/lib/utils';
 
 interface Props { onFileSelect: (file: File, type: FileType) => void; }
 
@@ -16,7 +16,7 @@ export default function FileUploader({ onFileSelect }: Props) {
     if (!accepted.length) return;
     const file = accepted[0];
     const type = detectFileType(file);
-    if (!type) { setError('Format not supported. Use PNG, JPG, WEBP, MP4, MOV, etc.'); return; }
+    if (!type) { setError('Format tidak didukung. Didukung: PNG, JPG, JPEG, WEBP, BMP, TIFF, HEIC, HEIF, GIF, SVG, AVIF, JXL, ICO, MP4, WEBM, MOV, AVI, MKV'); return; }
     const sizeErr = validateFileSize(file, type);
     if (sizeErr) { setError(sizeErr); return; }
     onFileSelect(file, type);
@@ -24,7 +24,10 @@ export default function FileUploader({ onFileSelect }: Props) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop, maxFiles: 1, maxSize: 50 * 1024 * 1024,
-    accept: { 'image/*': ALLOWED_IMAGE_TYPES, 'video/*': ALLOWED_VIDEO_TYPES },
+    accept: {
+      'image/*': ALLOWED_IMAGE_EXTENSIONS.map(ext => `.${ext}`),
+      'video/*': ['.mp4','.webm','.mov','.avi','.mkv','.wmv','.flv','.3gp'],
+    },
   });
 
   return (

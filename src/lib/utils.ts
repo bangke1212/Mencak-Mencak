@@ -9,6 +9,19 @@ export const ALLOWED_IMAGE_TYPES = [
   'image/webp',
   'image/bmp',
   'image/tiff',
+  'image/heic',
+  'image/heif',
+  'image/gif',
+  'image/svg+xml',
+  'image/avif',
+  'image/jxl',
+];
+
+export const ALLOWED_IMAGE_EXTENSIONS = [
+  'png', 'jpg', 'jpeg', 'jpe', 'jfif',
+  'webp', 'bmp', 'tiff', 'tif',
+  'heic', 'heif', 'gif', 'svg',
+  'avif', 'jxl', 'ico',
 ];
 
 export const ALLOWED_VIDEO_TYPES = [
@@ -22,10 +35,10 @@ export const ALLOWED_VIDEO_TYPES = [
 export function detectFileType(file: File): FileType | null {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) return 'image';
   if (ALLOWED_VIDEO_TYPES.includes(file.type)) return 'video';
-  // Check by extension
+  // Check by extension (broader coverage)
   const ext = file.name.split('.').pop()?.toLowerCase();
-  if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'tiff', 'tif'].includes(ext || '')) return 'image';
-  if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext || '')) return 'video';
+  if (ALLOWED_IMAGE_EXTENSIONS.includes(ext || '')) return 'image';
+  if (['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'flv', '3gp'].includes(ext || '')) return 'video';
   return null;
 }
 

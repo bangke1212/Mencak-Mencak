@@ -11,12 +11,18 @@ interface Props {
    GENERATE SAMPLE IMAGES via Canvas
    ============================================================ */
 const IMAGE_SAMPLES = [
-  { id: 'sunset',  emoji: '🌅', colors: ['#ff7e5f','#feb47b'], title: 'Beautiful Sunset',    wm: 'SAMPLE',      fmt: 'image/png'  as const, ext: 'png'  },
-  { id: 'ocean',   emoji: '🌊', colors: ['#2193b0','#6dd5ed'], title: 'Ocean View',         wm: 'PREVIEW',     fmt: 'image/jpeg' as const, ext: 'jpg'  },
-  { id: 'forest',  emoji: '🌲', colors: ['#11998e','#38ef7d'], title: 'Forest Landscape',   wm: 'DRAFT',       fmt: 'image/webp' as const, ext: 'webp' },
-  { id: 'purple',  emoji: '💜', colors: ['#8E2DE2','#4A00E0'], title: 'Night Scene',        wm: 'LOGO',        fmt: 'image/png'  as const, ext: 'png'  },
-  { id: 'photo',   emoji: '📸', colors: ['#667eea','#764ba2'], title: 'Portrait Photo',      wm: 'COPYRIGHT',   fmt: 'image/jpeg' as const, ext: 'jpg'  },
-  { id: 'nature',  emoji: '🏔️', colors: ['#f5576c','#f093fb'], title: 'Mountain View',      wm: 'WATERMARK',   fmt: 'image/png'  as const, ext: 'png'  },
+  { id: 'sunset',  emoji: '🌅', colors: ['#ff7e5f','#feb47b'], label: 'Sunset PNG',        wm: 'SAMPLE',      fmt: 'image/png'  as const, ext: 'png'  },
+  { id: 'ocean',   emoji: '🌊', colors: ['#2193b0','#6dd5ed'], label: 'Ocean JPG',         wm: 'PREVIEW',     fmt: 'image/jpeg' as const, ext: 'jpg'  },
+  { id: 'forest',  emoji: '🌲', colors: ['#11998e','#38ef7d'], label: 'Forest WEBP',       wm: 'DRAFT',       fmt: 'image/webp' as const, ext: 'webp' },
+  { id: 'purple',  emoji: '💜', colors: ['#8E2DE2','#4A00E0'], label: 'Purple PNG',        wm: 'LOGO',        fmt: 'image/png'  as const, ext: 'png'  },
+  { id: 'photo',   emoji: '📸', colors: ['#667eea','#764ba2'], label: 'Photo JPEG',        wm: 'COPYRIGHT',   fmt: 'image/jpeg' as const, ext: 'jpeg' },
+  { id: 'nature',  emoji: '🏔️', colors: ['#f5576c','#f093fb'], label: 'Nature BMP',        wm: 'WATERMARK',   fmt: 'image/bmp'  as const, ext: 'bmp'  },
+  { id: 'heic',    emoji: '📱', colors: ['#f7971e','#ffd200'], label: 'Phone HEIC',        wm: 'SAMPLE',      fmt: 'image/heic' as const, ext: 'heic' },
+  { id: 'svg',     emoji: '🎨', colors: ['#ee0979','#ff6a00'], label: 'Vector SVG',        wm: 'PREVIEW',     fmt: 'image/svg+xml' as const, ext: 'svg' },
+  { id: 'gif',     emoji: '🖼️', colors: ['#00b09b','#96c93d'], label: 'Animated GIF',      wm: 'DRAFT',       fmt: 'image/gif'  as const, ext: 'gif'  },
+  { id: 'avif',    emoji: '🆕', colors: ['#fc4a1a','#f7b733'], label: 'New AVIF',          wm: 'LOGO',        fmt: 'image/avif' as const, ext: 'avif' },
+  { id: 'tiff',    emoji: '🖨️', colors: ['#4facfe','#00f2fe'], label: 'Print TIFF',        wm: 'COPYRIGHT',   fmt: 'image/tiff' as const, ext: 'tiff' },
+  { id: 'ico',     emoji: '🔷', colors: ['#a18cd1','#fbc2eb'], label: 'Icon ICO',          wm: 'WM',          fmt: 'image/x-icon' as const, ext: 'ico' },
 ];
 
 function drawSampleImage(canvas: HTMLCanvasElement, s: typeof IMAGE_SAMPLES[0]): void {
@@ -30,7 +36,7 @@ function drawSampleImage(canvas: HTMLCanvasElement, s: typeof IMAGE_SAMPLES[0]):
   ctx.beginPath(); ctx.arc(w*0.2, h*0.7, 70, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
   ctx.font = 'bold 40px Inter,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(s.title, w/2, h*0.38);
+  ctx.fillText(s.label, w/2, h*0.35);
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.font = 'bold 56px Inter,sans-serif';
   ctx.save(); ctx.translate(w/2, h/2); ctx.rotate(-0.25);
@@ -221,7 +227,7 @@ export default function SampleFiles({ onSelect }: Props) {
               <span style={{ fontSize: 22, flexShrink: 0 }}>{s.emoji}</span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#333', whiteSpace: 'nowrap' }}>
-                  {isGen ? 'Generating...' : isErr ? 'Error' : s.title}
+                  {isGen ? 'Generating...' : isErr ? 'Error' : s.label}
                 </div>
                 <div style={{ fontSize: 10, color: isErr ? '#dc2626' : '#aaa' }}>
                   {isErr ? 'Retry' : `${s.ext.toUpperCase()} · ${s.wm}`}

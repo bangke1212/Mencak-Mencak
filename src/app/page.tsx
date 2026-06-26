@@ -146,7 +146,7 @@ export default function Home() {
 
         {/* Format info */}
         <p style={{fontSize:12,color:'#aaa',marginTop:16,marginBottom:24}}>
-          Supported: PNG, JPG, WEBP, BMP, TIFF, MP4, WEBM, MOV, AVI, MKV · Max 50MB
+          Mendukung: PNG, JPG, JPEG, WEBP, BMP, TIFF, HEIC, HEIF, GIF, SVG, AVIF, JXL, ICO, MP4, WEBM, MOV, AVI, MKV · Max 50MB
         </p>
 
         {/* Sample Files */}
