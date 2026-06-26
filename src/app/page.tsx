@@ -21,6 +21,15 @@ export default function Home() {
 
   const handleFileSelect = useCallback((f: File, type: FileType) => {
     try {
+      // Validasi ulang
+      if (!f || f.size === 0) {
+        alert('File kosong atau tidak valid.');
+        return;
+      }
+      if (f.size > 50 * 1024 * 1024) {
+        alert('File terlalu besar. Maksimal 50MB.');
+        return;
+      }
       const objectUrl = URL.createObjectURL(f);
       setFile(f);
       setFileType(type);
@@ -36,6 +45,7 @@ export default function Home() {
       });
     } catch (e) {
       console.error('File select error:', e);
+      alert('Gagal memproses file. Coba file lain.');
     }
   }, []);
 

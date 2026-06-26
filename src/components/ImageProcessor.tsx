@@ -42,10 +42,14 @@ export default function ImageProcessor({
   useEffect(() => {
     if (!file) return;
     setImageLoaded(false);
-    setProcessingState({ status: 'idle', progress: 0, message: 'Loading image...' });
+    setProcessingState({ status: 'idle', progress: 0, message: 'Memuat gambar...' });
 
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
+    
+    // Set crossOrigin untuk menghindari CORS issues
+    img.crossOrigin = 'anonymous';
+    
     img.onload = () => {
       imgRef.current = img;
       setOriginalDimensions({ w: img.naturalWidth, h: img.naturalHeight });
@@ -53,15 +57,29 @@ export default function ImageProcessor({
         const canvas = originalCanvasRef.current;
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
-        canvas.getContext('2d')!.drawImage(img, 0, 0);
+        const ctx = canvas.getContext('2d')!;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
       }
       setPreviewUrl(objectUrl);
       setImageLoaded(true);
-      setProcessingState({ status: 'idle', progress: 0, message: 'Ready to detect watermarks' });
+      setProcessingState({ status: 'idle', progress: 0, message: 'Siap! Klik Deteksi Otomatis untuk memulai.' });
     };
-    img.onerror = () => {
-      setProcessingState({ status: 'error', progress: 0, message: 'Gagal memuat gambar. Coba format lain (PNG, JPG, WEBP).' });
+    
+    img.onerror = (e) => {
+      console.error('Image load error for:', file.name, file.type, file.size);
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      let errorMsg = 'Gagal memuat gambar. ';
+      if (['heic','heif','svg','avif','jxl','ico'].includes(ext)) {
+        errorMsg += `Format ${ext.toUpperCase()} mungkin tidak didukung browser. Coba konversi ke PNG/JPG dulu.`;
+      } else if (file.size > 10 * 1024 * 1024) {
+        errorMsg += 'File terlalu besar. Maksimal 10MB untuk performa optimal.';
+      } else {
+        errorMsg += 'File mungkin rusak atau format tidak dikenal. Coba file lain.';
+      }
+      setProcessingState({ status: 'error', progress: 0, message: errorMsg });
     };
+    
     img.src = objectUrl;
     return () => { URL.revokeObjectURL(objectUrl); };
   }, [file]);
