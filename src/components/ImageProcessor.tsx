@@ -55,18 +55,19 @@ export default function ImageProcessor({
         ctx.drawImage(img, 0, 0);
       }
 
-      setPreviewUrl(URL.createObjectURL(file));
+      setPreviewUrl(processedFile.originalUrl);
       setImageLoaded(true);
 
       const updateState: ProcessingState = { ...processingState, status: 'idle', progress: 0 };
       setProcessingState(updateState);
-      onUpdate({ ...processedFile, processingState: updateState, originalUrl: URL.createObjectURL(file) });
+      onUpdate({ ...processedFile, processingState: updateState });
     };
     img.onerror = () => {
       setProcessingState({ status: 'error', progress: 0, message: 'Failed to load image' });
     };
-    img.src = URL.createObjectURL(file);
-  }, [file]);
+    // Use the already-created object URL from processedFile
+    img.src = processedFile.originalUrl;
+  }, []); // Only run once on mount
 
   // Auto-detect watermarks
   const handleAutoDetect = async () => {

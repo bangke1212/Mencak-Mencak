@@ -19,18 +19,23 @@ export default function Home() {
   useEffect(() => { setMounted(true); }, []);
 
   const handleFileSelect = useCallback((f: File, type: FileType) => {
-    setFile(f);
-    setFileType(type);
-    setProcessedFile({
-      id: crypto.randomUUID(),
-      originalName: f.name,
-      fileType: type,
-      originalSize: f.size,
-      originalUrl: URL.createObjectURL(f),
-      watermarkRegions: [],
-      processingState: createEmptyProcessingState(),
-      createdAt: new Date(),
-    });
+    try {
+      const objectUrl = URL.createObjectURL(f);
+      setFile(f);
+      setFileType(type);
+      setProcessedFile({
+        id: crypto.randomUUID(),
+        originalName: f.name,
+        fileType: type,
+        originalSize: f.size,
+        originalUrl: objectUrl,
+        watermarkRegions: [],
+        processingState: createEmptyProcessingState(),
+        createdAt: new Date(),
+      });
+    } catch (e) {
+      console.error('File select error:', e);
+    }
   }, []);
 
   const handleUpdate = useCallback((p: ProcessedFile) => setProcessedFile(p), []);
