@@ -48,15 +48,48 @@ export default function Home() {
 
   if (file && fileType && processedFile) {
     return (
-      <div style={{minHeight:'100vh',background:'#fff'}}>
-        <header style={{position:'sticky',top:0,zIndex:50,background:'rgba(255,255,255,0.9)',backdropFilter:'blur(10px)',borderBottom:'1px solid #eee',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <button onClick={handleReset} style={{display:'flex',alignItems:'center',gap:6,color:'#555',fontSize:14,fontWeight:500,border:'none',background:'none',cursor:'pointer'}}>
-            ← Back
+      <div style={{minHeight:'100vh',background:'#fafbfc'}}>
+        {/* Premium Header */}
+        <header style={{
+          position:'sticky',top:0,zIndex:50,
+          background:'rgba(255,255,255,0.95)',backdropFilter:'blur(16px)',
+          borderBottom:'1px solid #f0f0f0',
+          padding:'14px 24px',
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+        }}>
+          <button onClick={handleReset} style={{
+            display:'flex',alignItems:'center',gap:8,
+            color:'#555',fontSize:14,fontWeight:600,
+            border:'none',background:'#f3f4f6',
+            borderRadius:10,padding:'8px 16px',cursor:'pointer',
+          }}>
+            ← Kembali
           </button>
-          <span style={{fontSize:14,fontWeight:600,color:'#111',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</span>
-          <div style={{width:50}} />
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{
+              width:32,height:32,
+              background:'linear-gradient(135deg,#3b82f6,#6366f1)',
+              borderRadius:10,
+              display:'flex',alignItems:'center',justifyContent:'center',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </div>
+            <span style={{
+              fontWeight:700,fontSize:16,color:'#111',
+              maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+            }}>{file.name}</span>
+            <span style={{
+              fontSize:11,fontWeight:600,
+              padding:'4px 10px',borderRadius:99,
+              background:fileType==='image'?'#eff6ff':'#fef3c7',
+              color:fileType==='image'?'#2563eb':'#d97706',
+            }}>
+              {fileType==='image'?'🖼️ Gambar':'🎬 Video'}
+            </span>
+          </div>
+          <div style={{width:80}} />
         </header>
-        <div style={{maxWidth:1200,margin:'0 auto',padding:'20px'}}>
+        <div style={{maxWidth:1400,margin:'0 auto',padding:'20px 24px'}}>
           {fileType === 'image' && <ImageProcessor file={file} processedFile={processedFile} onUpdate={handleUpdate} onReset={handleReset} />}
           {fileType === 'video' && <VideoProcessor file={file} processedFile={processedFile} onUpdate={handleUpdate} onReset={handleReset} />}
         </div>
