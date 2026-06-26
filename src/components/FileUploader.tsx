@@ -103,8 +103,20 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
         <div className="mt-6 flex items-center justify-center gap-4 text-xs text-gray-400">
           <span className="px-3 py-1.5 bg-gray-100 rounded-full">🖼️ Images</span>
           <span className="px-3 py-1.5 bg-gray-100 rounded-full">🎬 Videos</span>
-          <span className="px-3 py-1.5 bg-gray-100 rounded-full">Max 50 MB</span>
+          <span className="px-3 py-1.5 bg-gray-100 rounded-full">📦 Max 50 MB</span>
         </div>
+
+        {/* Browse Button */}
+        <button
+          type="button"
+          className="mt-6 inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl
+            font-semibold text-base hover:from-blue-600 hover:to-purple-700 transition-all
+            shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30
+            active:scale-95"
+        >
+
+          Upload a File
+        </button>
 
         <p className="mt-4 text-xs text-gray-400">
           PNG, JPG, WEBP, BMP, TIFF, MP4, WEBM, MOV, AVI, MKV
