@@ -2,172 +2,96 @@
 
 import { useState } from 'react';
 
-interface URLImporterProps {
+interface Props {
   onFileLoad: (file: File, type: 'image' | 'video') => void;
   onClose: () => void;
 }
 
-export default function URLImporter({ onFileLoad, onClose }: URLImporterProps) {
+export default function URLImporter({ onFileLoad, onClose }: Props) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
 
-  const handleImport = async () => {
-    if (!url.trim()) { setError('Please enter a URL'); return; }
-    try { new URL(url); } catch { setError('Invalid URL format'); return; }
-
-    setError(null); setLoading(true); setProgress(10);
+  const import_ = async () => {
+    if (!url.trim()) { setError('Enter a URL'); return; }
+    setError(''); setLoading(true); setProgress(10);
+    try {
+      new URL(url);
+    } catch { setError('Invalid URL'); setLoading(false); return; }
 
     try {
-      const response = await fetch('/api/proxy-download', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
-      });
-      if (response.ok) {
-        setProgress(50);
-        const result = await response.json();
-        if (result.success && result.data) {
-          const byteString = atob(result.data);
-          const ab = new ArrayBuffer(byteString.length);
-          const ia = new Uint8Array(ab);
-          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-          const mimeType = result.contentType || 'image/png';
-          const blob = new Blob([ab], { type: mimeType });
-          const filename = extractFilename(url) || `import-${Date.now()}`;
-          const file = new File([blob], filename, { type: mimeType });
-          const fileType = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : null;
-          if (!fileType) throw new Error(`Unsupported type: ${mimeType}`);
-          setProgress(100);
-          setTimeout(() => onFileLoad(file, fileType), 200);
-          return;
-        }
-        throw new Error(result.error || 'Download failed');
-      }
-      // Direct fallback
       setProgress(30);
-      const direct = await fetch(url.trim());
-      if (!direct.ok) throw new Error(`HTTP ${direct.status}`);
-      const blob = await direct.blob();
-      const filename = extractFilename(url) || `import-${Date.now()}`;
-      const file = new File([blob], filename, { type: blob.type });
-      const fileType = blob.type.startsWith('image/') ? 'image' : blob.type.startsWith('video/') ? 'video' : null;
-      if (!fileType) throw new Error(`Unsupported type: ${blob.type}`);
+      const res = await fetch(url.trim());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const name = extractName(url) || 'import';
+      const file = new File([blob], name, { type: blob.type });
+      const type = blob.type.startsWith('image/') ? 'image' : blob.type.startsWith('video/') ? 'video' : null;
+      if (!type) throw new Error('Unsupported file type');
       setProgress(100);
-      setTimeout(() => onFileLoad(file, fileType), 200);
-    } catch (err: any) {
-      setError(err.message || 'Failed to import file');
+      setTimeout(() => onFileLoad(file, type), 200);
+    } catch (e: any) {
+      setError(e.message || 'Download failed');
       setLoading(false);
     }
   };
 
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text && (text.startsWith('http://') || text.startsWith('https://'))) setUrl(text);
-    } catch {}
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={!loading ? onClose : undefined} />
-
-      {/* Modal */}
-      <div className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 animate-scaleIn">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">Import from URL</h3>
-              <p className="text-xs text-slate-400">Paste any image or video link</p>
-            </div>
-          </div>
-          <button onClick={onClose} disabled={loading} className="p-2 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50">
-            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <div style={{position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.4)',backdropFilter:'blur(4px)'}} onClick={loading ? undefined : onClose} />
+      <div style={{position:'relative',background:'white',borderRadius:20,padding:'28px 24px',maxWidth:460,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.15)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+          <h3 style={{fontSize:18,fontWeight:700,margin:0}}>🔗 Import from URL</h3>
+          <button onClick={onClose} disabled={loading} style={{border:'none',background:'#f3f4f6',borderRadius:10,width:32,height:32,cursor:'pointer',fontSize:18}}>✕</button>
         </div>
 
-        {/* Input */}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Image or Video URL
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/image.png"
-                className="flex-1 input-premium"
-                disabled={loading}
-                onKeyDown={(e) => e.key === 'Enter' && handleImport()}
-                autoFocus
-              />
-              <button onClick={handlePaste} disabled={loading} className="px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors text-lg" title="Paste">
-                📋
-              </button>
-            </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:600,color:'#555',display:'block',marginBottom:6}}>Image or Video URL</label>
+          <div style={{display:'flex',gap:8}}>
+            <input
+              type="url" value={url} onChange={e => setUrl(e.target.value)}
+              placeholder="https://example.com/photo.jpg"
+              disabled={loading} autoFocus
+              onKeyDown={e => e.key === 'Enter' && import_()}
+              style={{flex:1,padding:'12px 16px',border:'2px solid #e2e8f0',borderRadius:12,fontSize:14,outline:'none'}}
+            />
+            <button onClick={async () => { try { const t = await navigator.clipboard.readText(); if (t?.startsWith('http')) setUrl(t); } catch {} }}
+              disabled={loading} style={{padding:'12px',background:'#f3f4f6',border:'none',borderRadius:12,cursor:'pointer',fontSize:18}}>📋</button>
           </div>
+        </div>
 
-          {/* Quick examples */}
-          <div className="flex flex-wrap gap-2">
-            {['https://picsum.photos/800/600', 'https://placehold.co/600x400'].map((ex) => (
-              <button key={ex} onClick={() => setUrl(ex)} className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-full text-slate-500 transition-colors">
-                {ex}
-              </button>
-            ))}
-          </div>
-
-          {/* Progress */}
-          {loading && (
-            <div className="space-y-2 animate-fadeIn">
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
-              </div>
-              <p className="text-xs text-slate-400 text-center">Downloading... {progress}%</p>
+        {loading && (
+          <div style={{marginBottom:14}}>
+            <div style={{height:6,background:'#f0f0f0',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${progress}%`,background:'linear-gradient(90deg,#3b82f6,#6366f1)',borderRadius:3,transition:'width 0.3s'}} />
             </div>
-          )}
-
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-600 text-sm flex items-start gap-2 animate-fadeIn">
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span>{error}</span>
-            </div>
-          )}
-
-          <p className="text-xs text-slate-400">Supported: PNG, JPG, WEBP, GIF, BMP, MP4, WEBM, MOV (max 50MB)</p>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-3">
-            <button onClick={handleImport} disabled={loading || !url.trim()}
-              className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
-              {loading ? '⏳ Downloading...' : '⬇️ Import File'}
-            </button>
-            <button onClick={onClose} disabled={loading} className="btn-secondary">Cancel</button>
+            <p style={{fontSize:12,color:'#999',textAlign:'center',marginTop:6}}>Downloading... {progress}%</p>
           </div>
+        )}
+
+        {error && (
+          <div style={{padding:'10px 14px',borderRadius:10,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',fontSize:13,marginBottom:14}}>
+            {error}
+          </div>
+        )}
+
+        <p style={{fontSize:11,color:'#aaa',marginBottom:14}}>PNG, JPG, WEBP, GIF, MP4, WEBM, MOV · Max 50MB</p>
+
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={import_} disabled={loading || !url.trim()}
+            style={{flex:1,padding:'14px',background:'linear-gradient(135deg,#2563eb,#6366f1)',color:'white',border:'none',borderRadius:12,fontSize:15,fontWeight:700,cursor:'pointer',opacity:loading||!url.trim()?0.5:1}}>
+            {loading ? '⏳ Downloading...' : '⬇️ Import'}
+          </button>
+          <button onClick={onClose} disabled={loading}
+            style={{padding:'14px 24px',background:'#f3f4f6',color:'#555',border:'none',borderRadius:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>Cancel</button>
         </div>
       </div>
     </div>
   );
 }
 
-function extractFilename(url: string): string {
-  try {
-    const pathname = new URL(url).pathname;
-    const parts = pathname.split('/');
-    const last = parts[parts.length - 1];
-    if (last && last.includes('.')) return last;
-    return `import-${Date.now()}`;
-  } catch { return `import-${Date.now()}`; }
+function extractName(url: string): string {
+  try { const p = new URL(url).pathname.split('/'); const l = p[p.length-1]; return l?.includes('.') ? l : `file-${Date.now()}`; }
+  catch { return `file-${Date.now()}`; }
 }

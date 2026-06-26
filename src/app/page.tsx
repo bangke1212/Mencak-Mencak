@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ProcessedFile, FileType } from '@/types';
 import { createEmptyProcessingState } from '@/lib/utils';
 import FileUploader from '@/components/FileUploader';
@@ -13,61 +13,43 @@ export default function Home() {
   const [fileType, setFileType] = useState<FileType | null>(null);
   const [processedFile, setProcessedFile] = useState<ProcessedFile | null>(null);
   const [showURLImport, setShowURLImport] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    // Expose drop handler to FileUploader child via a global event
-    const handler = (e: CustomEvent) => {
-      const { type } = e.detail;
-      if (type === 'image' || type === 'video') handleFileSelect(e.detail.file, type);
-    };
-    window.addEventListener('watermark:drop', handler as EventListener);
-    return () => window.removeEventListener('watermark:drop', handler as EventListener);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
-  const handleFileSelect = useCallback((selectedFile: File, type: FileType) => {
-    setFile(selectedFile);
+  const handleFileSelect = useCallback((f: File, type: FileType) => {
+    setFile(f);
     setFileType(type);
     setProcessedFile({
       id: crypto.randomUUID(),
-      originalName: selectedFile.name,
+      originalName: f.name,
       fileType: type,
-      originalSize: selectedFile.size,
-      originalUrl: URL.createObjectURL(selectedFile),
+      originalSize: f.size,
+      originalUrl: URL.createObjectURL(f),
       watermarkRegions: [],
       processingState: createEmptyProcessingState(),
       createdAt: new Date(),
     });
   }, []);
 
-  const handleUpdate = useCallback((updated: ProcessedFile) => setProcessedFile(updated), []);
+  const handleUpdate = useCallback((p: ProcessedFile) => setProcessedFile(p), []);
   const handleReset = useCallback(() => {
     setFile(null); setFileType(null);
     if (processedFile?.originalUrl) URL.revokeObjectURL(processedFile.originalUrl);
     setProcessedFile(null);
   }, [processedFile]);
 
-  // ===== PROCESSOR VIEW =====
   if (file && fileType && processedFile) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)]">
-        <header className="glass sticky top-0 z-50 border-b border-white/20">
-          <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-            <button onClick={handleReset} className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--brand-600)] transition-colors font-medium text-sm">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-              Back
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-gradient-to-br from-[var(--brand-500)] to-[var(--accent)] rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              </div>
-              <span className="text-sm font-semibold text-[var(--text-primary)] truncate max-w-[200px]">{file.name}</span>
-            </div>
-            <div className="w-[80px]" />
-          </div>
+      <div style={{minHeight:'100vh',background:'#fff'}}>
+        <header style={{position:'sticky',top:0,zIndex:50,background:'rgba(255,255,255,0.9)',backdropFilter:'blur(10px)',borderBottom:'1px solid #eee',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <button onClick={handleReset} style={{display:'flex',alignItems:'center',gap:6,color:'#555',fontSize:14,fontWeight:500,border:'none',background:'none',cursor:'pointer'}}>
+            ← Back
+          </button>
+          <span style={{fontSize:14,fontWeight:600,color:'#111',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</span>
+          <div style={{width:50}} />
         </header>
-        <div className="max-w-7xl mx-auto px-4 py-6">
+        <div style={{maxWidth:1200,margin:'0 auto',padding:'20px'}}>
           {fileType === 'image' && <ImageProcessor file={file} processedFile={processedFile} onUpdate={handleUpdate} onReset={handleReset} />}
           {fileType === 'video' && <VideoProcessor file={file} processedFile={processedFile} onUpdate={handleUpdate} onReset={handleReset} />}
         </div>
@@ -75,235 +57,139 @@ export default function Home() {
     );
   }
 
-  // ===== HOMEPAGE =====
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] relative">
-      {/* Ambient Background Orbs */}
-      <div className="bg-orbs">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
+    <div style={{minHeight:'100vh',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",background:'#fff',color:'#111'}}>
+      {/* Header */}
+      <header style={{borderBottom:'1px solid #f0f0f0',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',maxWidth:1200,margin:'0 auto'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:34,height:34,background:'linear-gradient(135deg,#3b82f6,#6366f1)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </div>
+          <span style={{fontWeight:700,fontSize:17,letterSpacing:'-0.3px'}}>WatermarkRemover</span>
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          <span style={{fontSize:11,fontWeight:600,padding:'4px 10px',borderRadius:99,background:'#eff6ff',color:'#2563eb'}}>🤖 AI</span>
+          <span style={{fontSize:11,fontWeight:600,padding:'4px 10px',borderRadius:99,background:'#f0fdf4',color:'#16a34a'}}>Free</span>
+        </div>
+      </header>
+
+      {/* ===== HERO ===== */}
+      <div style={{maxWidth:700,margin:'0 auto',padding:'40px 20px 32px',textAlign:'center'}}>
+        <div style={{width:64,height:64,margin:'0 auto 24px',background:'linear-gradient(135deg,#3b82f6,#6366f1,#a855f7)',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 32px rgba(59,130,246,0.25)'}}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </div>
+
+        <h1 style={{fontSize:32,fontWeight:800,lineHeight:1.2,letterSpacing:'-0.5px',margin:'0 0 8px'}}>
+          Remove Watermarks<br/>From <span style={{background:'linear-gradient(135deg,#2563eb,#6366f1,#a855f7)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Images & Videos</span>
+        </h1>
+        <p style={{fontSize:16,color:'#666',margin:'0 0 32px',lineHeight:1.5}}>
+          100% automatically. No signup. Free forever.
+        </p>
+
+        {/* ===== ACTION BUTTONS ===== */}
+        <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:24}}>
+          {/* Upload Button */}
+          <label style={{display:'block',cursor:'pointer'}}>
+            <input type="file" style={{display:'none'}} accept="image/*,video/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0]; if (!f) return;
+                const type = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : null;
+                if (type) handleFileSelect(f, type);
+              }}
+            />
+            <div style={{
+              width:'100%',padding:'18px 24px',
+              background:'linear-gradient(135deg,#2563eb,#6366f1)',
+              color:'white',borderRadius:14,border:'none',
+              fontSize:17,fontWeight:700,cursor:'pointer',
+              display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+              boxShadow:'0 4px 20px rgba(37,99,235,0.3)',
+              transition:'all 0.2s',
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              Upload Image or Video
+            </div>
+          </label>
+
+          {/* URL Button */}
+          <button onClick={() => setShowURLImport(true)} style={{
+            width:'100%',padding:'16px 24px',
+            background:'#fff',color:'#333',
+            border:'2px solid #e2e8f0',borderRadius:14,
+            fontSize:16,fontWeight:600,cursor:'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',gap:10,
+            transition:'all 0.2s',
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            Paste Image URL
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div style={{display:'flex',alignItems:'center',gap:12,color:'#aaa',fontSize:13,fontWeight:500,marginBottom:20}}>
+          <div style={{flex:1,height:1,background:'#e5e7eb'}} />
+          <span>or drag & drop</span>
+          <div style={{flex:1,height:1,background:'#e5e7eb'}} />
+        </div>
+
+        {/* Drop Zone */}
+        <FileUploader onFileSelect={handleFileSelect} />
+
+        {/* Format info */}
+        <p style={{fontSize:12,color:'#aaa',marginTop:16}}>
+          Supported: PNG, JPG, WEBP, BMP, TIFF, MP4, WEBM, MOV, AVI, MKV · Max 50MB
+        </p>
       </div>
 
-      {/* ===== NAVBAR (remove.bg style - minimal) ===== */}
-      <nav className="relative z-50 glass border-b border-white/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-[var(--brand-500)] to-[var(--accent)] rounded-xl flex items-center justify-center shadow-md">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </div>
-            <span className="font-bold text-[var(--text-primary)] text-lg tracking-tight">WatermarkRemover</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <span className="badge badge-blue">🤖 AI-Powered</span>
-            <span className="badge badge-green">✨ Free</span>
-          </div>
-        </div>
-      </nav>
+      {/* ===== 3 STEPS ===== */}
+      <div style={{maxWidth:900,margin:'0 auto',padding:'40px 20px'}}>
+        <h2 style={{textAlign:'center',fontSize:24,fontWeight:700,marginBottom:32}}>
+          How it <span style={{background:'linear-gradient(135deg,#2563eb,#6366f1)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>works</span>
+        </h2>
 
-      {/* ===== HERO SECTION ===== */}
-      <section className="relative z-10 pt-16 sm:pt-24 pb-8 text-center">
-        <div className="max-w-4xl mx-auto px-4">
-          {/* Floating icon animation */}
-          <div className="animate-float mb-6">
-            <div className="w-20 h-20 mx-auto bg-gradient-to-br from-[var(--brand-500)] via-[var(--accent)] to-purple-500 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-500/20 rotate-3 hover:rotate-0 transition-transform duration-500">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </div>
-          </div>
-
-          {/* Headline (remove.bg style) */}
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-[var(--text-primary)] animate-fadeInUp">
-            Remove Watermarks From
-            <br />
-            <span className="gradient-text">Images & Videos</span>
-          </h1>
-          <p className="mt-5 text-lg text-[var(--text-secondary)] max-w-2xl mx-auto animate-fadeInUp stagger-1">
-            100% automatically — in just a few seconds. No signup required.
-          </p>
-
-          {/* Trust indicators */}
-          <div className="flex flex-wrap items-center justify-center gap-3 mt-6 text-xs text-[var(--text-tertiary)] animate-fadeInUp stagger-2">
-            {['🔒 Privacy First', '⚡ Instant Results', '🤖 LaMa AI', '📦 Up to 50MB'].map((t) => (
-              <span key={t} className="flex items-center gap-1.5">{t}</span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== MAIN ACTION AREA ===== */}
-      <section className="relative z-10 max-w-3xl mx-auto px-4 pb-12 animate-fadeInUp stagger-3">
-        <div className="bg-white rounded-3xl border border-[var(--border-light)] shadow-xl shadow-blue-500/5 p-6 sm:p-8 md:p-10">
-
-          {/* === Upload + Import Buttons (remove.bg style - horizontal) === */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-6">
-            <label className="flex-1 cursor-pointer group">
-              <input type="file" className="hidden" accept="image/*,video/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]; if (!f) return;
-                  const type = f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : null;
-                  if (type) handleFileSelect(f, type);
-                }}
-              />
-              <div className="btn btn-primary btn-lg w-full group-hover:scale-[1.02] transition-transform">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Upload File
-              </div>
-            </label>
-
-            <button onClick={() => setShowURLImport(true)} className="btn btn-secondary btn-lg flex-1 hover:scale-[1.02] transition-transform">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              Paste Image URL
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="divider-text mb-6">OR</div>
-
-          {/* === Drop Zone (watermarkremover.io style) === */}
-          <FileUploader onFileSelect={handleFileSelect} />
-        </div>
-      </section>
-
-      {/* ===== HOW IT WORKS - 3 Steps (remove.bg style) ===== */}
-      <section className="relative z-10 max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-10 animate-fadeInUp">
-          <h2 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)]">
-            Remove watermark in <span className="gradient-text">3 simple steps</span>
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>
           {[
-            { step: '01', icon: '📤', title: 'Upload', desc: 'Upload your image or video, or paste a URL. Supports PNG, JPG, WEBP, MP4, MOV & more.' },
-            { step: '02', icon: '🤖', title: 'AI Processing', desc: 'Our LaMa AI automatically detects and removes watermarks with stunning precision.' },
-            { step: '03', icon: '📥', title: 'Download', desc: 'Get your clean, watermark-free result instantly. No registration required.' },
-          ].map((s, i) => (
-            <div key={s.step} className="card animate-fadeInUp" style={{ animationDelay: `${0.1 * i}s` }}>
-              <span className="text-xs font-bold text-[var(--brand-500)] tracking-wider">{s.step}</span>
-              <div className="text-3xl my-3">{s.icon}</div>
-              <h3 className="text-lg font-bold text-[var(--text-primary)] mb-2">{s.title}</h3>
-              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{s.desc}</p>
+            {num:'1',icon:'📤',title:'Upload',desc:'Choose a file from your device or paste a URL'},
+            {num:'2',icon:'🤖',title:'AI Removes',desc:'LaMa AI detects and removes watermarks automatically'},
+            {num:'3',icon:'📥',title:'Download',desc:'Get your clean result instantly — no signup needed'},
+          ].map((s) => (
+            <div key={s.num} style={{padding:24,borderRadius:16,border:'1px solid #f0f0f0',background:'#fafafa',textAlign:'center'}}>
+              <div style={{fontSize:32,marginBottom:10}}>{s.icon}</div>
+              <div style={{fontSize:12,fontWeight:700,color:'#2563eb',marginBottom:6}}>STEP {s.num}</div>
+              <h3 style={{fontSize:17,fontWeight:700,marginBottom:6}}>{s.title}</h3>
+              <p style={{fontSize:14,color:'#666',lineHeight:1.5}}>{s.desc}</p>
             </div>
           ))}
         </div>
-      </section>
+      </div>
 
-      {/* ===== BENTO GRID FEATURES ===== */}
-      <section className="relative z-10 max-w-5xl mx-auto px-4 py-12">
-        <div className="text-center mb-10 animate-fadeInUp">
-          <span className="badge badge-blue mb-3">✨ Features</span>
-          <h2 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] mt-3">
-            Why creators love <span className="gradient-text">WatermarkRemover</span>
-          </h2>
-        </div>
-
-        <div className="bento-grid">
-          {/* Large card - spans 8 cols on desktop */}
-          <div className="bento-card" style={{ gridColumn: 'span 8' }}>
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
-                <span className="text-2xl">🔍</span>
-              </div>
+      {/* ===== FEATURES ===== */}
+      <div style={{maxWidth:900,margin:'0 auto',padding:'20px 20px 60px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
+          {[
+            {icon:'🔍',title:'Auto Detection',desc:'AI finds watermarks automatically'},
+            {icon:'🎨',title:'AI Inpainting',desc:'Fills removed areas naturally'},
+            {icon:'🎬',title:'Video Ready',desc:'Frame-by-frame processing'},
+            {icon:'🔒',title:'Privacy First',desc:'Files never leave your device'},
+            {icon:'⚡',title:'Fast Results',desc:'Processed in seconds'},
+            {icon:'📱',title:'All Devices',desc:'Works on mobile & desktop'},
+          ].map((f) => (
+            <div key={f.title} style={{padding:18,borderRadius:14,border:'1px solid #f0f0f0',display:'flex',alignItems:'flex-start',gap:12}}>
+              <div style={{fontSize:24,flexShrink:0}}>{f.icon}</div>
               <div>
-                <h3 className="text-lg font-bold text-[var(--text-primary)] mb-1">Automatic Watermark Detection</h3>
-                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
-                  No manual selection needed. Our AI uses edge detection, frequency analysis, and deep learning to find watermarks in corners, center, or anywhere on your image. Just upload and let AI do the work — like magic.
-                </p>
+                <h4 style={{fontSize:14,fontWeight:700,margin:'0 0 2px'}}>{f.title}</h4>
+                <p style={{fontSize:12,color:'#888',margin:0}}>{f.desc}</p>
               </div>
             </div>
-          </div>
-
-          {/* Side card - spans 4 cols */}
-          <div className="bento-card" style={{ gridColumn: 'span 4' }}>
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center mb-3 shadow-md">
-              <span className="text-xl">🤖</span>
-            </div>
-            <h3 className="font-bold text-[var(--text-primary)] mb-1">AI Inpainting</h3>
-            <p className="text-sm text-[var(--text-secondary)]">LaMa AI fills removed areas with context-aware content — looks completely natural.</p>
-          </div>
-
-          {/* Bottom row */}
-          <div className="bento-card" style={{ gridColumn: 'span 4' }}>
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center mb-3 shadow-md">
-              <span className="text-xl">🎬</span>
-            </div>
-            <h3 className="font-bold text-[var(--text-primary)] mb-1">Video Support</h3>
-            <p className="text-sm text-[var(--text-secondary)]">Process video frames, remove watermarks frame by frame with consistent quality.</p>
-          </div>
-
-          <div className="bento-card" style={{ gridColumn: 'span 4' }}>
-            <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center mb-3 shadow-md">
-              <span className="text-xl">⚡</span>
-            </div>
-            <h3 className="font-bold text-[var(--text-primary)] mb-1">Browser-Native</h3>
-            <p className="text-sm text-[var(--text-secondary)]">Processing happens in your browser. Files never leave your device for maximum privacy.</p>
-          </div>
-
-          <div className="bento-card" style={{ gridColumn: 'span 4' }}>
-            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center mb-3 shadow-md">
-              <span className="text-xl">📱</span>
-            </div>
-            <h3 className="font-bold text-[var(--text-primary)] mb-1">All Devices</h3>
-            <p className="text-sm text-[var(--text-secondary)]">Works on desktop, tablet, and mobile. No app install needed — just your browser.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== STATS BAR ===== */}
-      <section className="relative z-10 max-w-4xl mx-auto px-4 py-12 animate-fadeInUp">
-        <div className="bg-gradient-to-r from-[var(--brand-50)] via-indigo-50 to-purple-50 rounded-3xl p-8 sm:p-10 border border-[var(--brand-100)]">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
-            {[
-              { value: '100%', label: 'Free Forever', sub: 'No credit card required' },
-              { value: '50MB', label: 'Max File Size', sub: 'High-res images & 4K video' },
-              { value: '< 30s', label: 'Processing Time', sub: 'Lightning fast AI results' },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <div className="text-3xl font-extrabold gradient-text">{stat.value}</div>
-                <div className="font-semibold text-[var(--text-primary)] mt-1">{stat.label}</div>
-                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{stat.sub}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== SUPPORTED FORMATS ===== */}
-      <section className="relative z-10 max-w-4xl mx-auto px-4 pb-12 text-center animate-fadeInUp">
-        <p className="text-sm text-[var(--text-tertiary)] mb-3">Supported Formats</p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {['PNG', 'JPG', 'WEBP', 'BMP', 'TIFF', 'MP4', 'WEBM', 'MOV', 'AVI', 'MKV', 'HEIC'].map((fmt) => (
-            <span key={fmt} className="badge badge-gray">{fmt}</span>
           ))}
         </div>
-      </section>
+      </div>
 
-      {/* ===== FOOTER ===== */}
-      <footer className="relative z-10 border-t border-[var(--border-light)] py-8">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-[var(--brand-500)] to-[var(--accent)] rounded-md flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </div>
-            <span className="text-sm font-semibold text-[var(--text-primary)]">WatermarkRemover</span>
-          </div>
-          <p className="text-xs text-[var(--text-tertiary)]">
-            Powered by LaMa AI · Next.js · Vercel
-          </p>
-        </div>
+      {/* Footer */}
+      <footer style={{borderTop:'1px solid #f0f0f0',padding:'24px 20px',textAlign:'center',fontSize:12,color:'#aaa'}}>
+        Powered by LaMa AI · Built with Next.js · Deployed on Vercel
       </footer>
 
-      {/* ===== MODALS ===== */}
       {showURLImport && <URLImporter onFileLoad={handleFileSelect} onClose={() => setShowURLImport(false)} />}
     </div>
   );
