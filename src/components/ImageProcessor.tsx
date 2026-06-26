@@ -371,6 +371,38 @@ export default function ImageProcessor({
   const isError = processingState.status === 'error';
   const hasRegions = processedFile.watermarkRegions.length > 0;
 
+  // Generate sample previews on error
+  const sampleCanvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!isError || !sampleCanvasRef.current) return;
+    const canvas = sampleCanvasRef.current;
+    canvas.width = 600;
+    canvas.height = 200;
+    const ctx = canvas.getContext('2d')!;
+    
+    const samples = [
+      { x: 10,  y: 10, w: 180, h: 180, c1: '#ff7e5f', c2: '#feb47b', wm: 'SAMPLE',  emoji: '🌅' },
+      { x: 210, y: 10, w: 180, h: 180, c1: '#667eea', c2: '#764ba2', wm: 'LOGO',    emoji: '📸' },
+      { x: 410, y: 10, w: 180, h: 180, c1: '#11998e', c2: '#38ef7d', wm: 'DRAFT',   emoji: '🌲' },
+    ];
+
+    for (const s of samples) {
+      const g = ctx.createLinearGradient(s.x, s.y, s.x + s.w, s.y + s.h);
+      g.addColorStop(0, s.c1); g.addColorStop(1, s.c2);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.roundRect(s.x, s.y, s.w, s.h, 12); ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(`SAMPLE`, s.x + s.w/2, s.y + 55);
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillText(s.emoji, s.x + s.w/2, s.y + 105);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(s.wm, s.x + s.w/2, s.y + 155);
+    }
+  }, [isError]);
+
   // ============================================
   // RENDER
   // ============================================
@@ -397,14 +429,81 @@ export default function ImageProcessor({
           </div>
         )}
         {isError && (
-          <div>
-            <div style={{ fontSize: 40, marginBottom: 8 }}>⚠️</div>
-            <p style={{ fontSize: 15, fontWeight: 600, color: '#dc2626', margin: 0 }}>{processingState.message}</p>
-            <button onClick={onReset} style={{
-              marginTop: 12, padding: '10px 24px', borderRadius: 12,
-              background: '#dc2626', color: 'white', border: 'none',
-              fontSize: 14, fontWeight: 600, cursor: 'pointer',
-            }}>← Kembali & Coba Lagi</button>
+          <div style={{ padding: '20px 0' }}>
+            <div style={{
+              width: 80, height: 80, margin: '0 auto 16px',
+              background: 'linear-gradient(135deg,#fecaca,#fee2e2)',
+              borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 36,
+            }}>🖼️💔</div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#991b1b', margin: '0 0 8px' }}>
+              Gagal Memuat Gambar
+            </h2>
+            <p style={{ fontSize: 14, color: '#dc2626', margin: '0 0 4px', lineHeight: 1.5 }}>
+              {processingState.message}
+            </p>
+            <p style={{ fontSize: 12, color: '#999', margin: '0 0 20px' }}>
+              File: {file.name} · {formatFileSize(file.size)}
+            </p>
+
+            {/* Solutions */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10,
+              maxWidth: 600, margin: '0 auto 20px',
+            }}>
+              <div style={{
+                background: '#fff', borderRadius: 12, padding: '14px 10px',
+                border: '1px solid #f0f0f0', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>🔄</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 2 }}>Konversi</div>
+                <div style={{ fontSize: 10, color: '#888' }}>Ke PNG / JPG dulu</div>
+              </div>
+              <div style={{
+                background: '#fff', borderRadius: 12, padding: '14px 10px',
+                border: '1px solid #f0f0f0', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>📁</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 2 }}>Coba File Lain</div>
+                <div style={{ fontSize: 10, color: '#888' }}>Format berbeda</div>
+              </div>
+              <div style={{
+                background: '#fff', borderRadius: 12, padding: '14px 10px',
+                border: '1px solid #f0f0f0', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 6 }}>🧪</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 2 }}>Sample</div>
+                <div style={{ fontSize: 10, color: '#888' }}>Gambar bawaan</div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={onReset} style={{
+                padding: '12px 28px', borderRadius: 12,
+                background: 'linear-gradient(135deg,#dc2626,#b91c1c)',
+                color: 'white', border: 'none',
+                fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(220,38,38,0.25)',
+              }}>← Kembali</button>
+              <button onClick={() => { onReset(); }} style={{
+                padding: '12px 28px', borderRadius: 12,
+                background: '#fff', color: '#555',
+                border: '1px solid #e5e7eb',
+                fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}>🔄 Coba Upload Ulang</button>
+            </div>
+
+            {/* Sample preview images */}
+            <div style={{ marginTop: 24 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 10 }}>
+                💡 Coba sample ini — gambar berkualitas & pasti berfungsi:
+              </p>
+              <canvas ref={sampleCanvasRef}
+                style={{ maxWidth: '100%', height: 'auto', borderRadius: 14, border: '1px solid #f0f0f0' }}
+              />
+            </div>
           </div>
         )}
         {imageLoaded && !isError && (
