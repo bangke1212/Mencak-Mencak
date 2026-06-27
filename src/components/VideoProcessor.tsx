@@ -2,8 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ProcessedFile, ProcessingState, WatermarkRegion } from '@/types';
-import { formatFileSize, estimateProcessingTime } from '@/lib/utils';
-import ProgressBar from './ProgressBar';
+import { formatFileSize } from '@/lib/utils';
 
 interface VideoProcessorProps {
   file: File;
@@ -12,32 +11,32 @@ interface VideoProcessorProps {
   onReset: () => void;
 }
 
-interface VideoFrame {
-  timestamp: number;
-  canvas: HTMLCanvasElement;
-}
-
 export default function VideoProcessor({
-  file,
-  processedFile,
-  onUpdate,
-  onReset,
+  file, processedFile, onUpdate, onReset,
 }: VideoProcessorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const processedCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [processingState, setProcessingState] = useState<ProcessingState>(
-    processedFile.processingState
-  );
+  const thumbCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [processingState, setProcessingState] = useState<ProcessingState>(processedFile.processingState);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [watermarkFrame, setWatermarkFrame] = useState<number | null>(null);
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [processingMethod, setProcessingMethod] = useState<'overlay-blur' | 'frame-replace'>('overlay-blur');
+  const [activeTab, setActiveTab] = useState<'preview' | 'result'>('preview');
+  const [detectedRegion, setDetectedRegion] = useState<WatermarkRegion | null>(null);
+  const [processedFrameUrl, setProcessedFrameUrl] = useState<string | null>(null);
 
-  // Load video
+  const isBusy = processingState.status === 'detecting' || processingState.status === 'processing';
+  const isDone = processingState.status === 'done';
+  const isError = processingState.status === 'error';
+  const hasRegions = processedFile.watermarkRegions.length > 0;
+
+  // Load video + generate thumbnail
   useEffect(() => {
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
@@ -46,187 +45,144 @@ export default function VideoProcessor({
 
   const handleVideoLoad = () => {
     if (videoRef.current) {
-      setDuration(videoRef.current.duration);
+      const v = videoRef.current;
+      setDuration(v.duration);
       setVideoLoaded(true);
-      onUpdate({
-        ...processedFile,
-        originalUrl: previewUrl || '',
-        processingState: { status: 'idle', progress: 0, message: '' },
-      });
+
+      // Generate thumbnail
+      v.currentTime = v.duration * 0.25;
     }
   };
 
-  // Capture current frame
-  const captureFrame = (): HTMLCanvasElement | null => {
-    const video = videoRef.current;
-    if (!video) return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')!.drawImage(video, 0, 0);
-    return canvas;
+  const handleThumbnail = () => {
+    const v = videoRef.current;
+    if (!v || !thumbCanvasRef.current) return;
+    const c = thumbCanvasRef.current;
+    c.width = 160;
+    c.height = 90;
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(v, 0, 0, 160, 90);
+    setThumbUrl(c.toDataURL('image/jpeg', 0.85));
   };
 
-  // Draw frame on original canvas
-  const drawCurrentFrame = () => {
-    const video = videoRef.current;
-    const canvas = originalCanvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')!.drawImage(video, 0, 0);
-  };
-
-  // Auto-detect watermark in current frame
+  // ===== DETECT =====
   const handleDetectInFrame = async () => {
-    const frame = captureFrame();
-    if (!frame) return;
+    const v = videoRef.current;
+    if (!v) return;
 
-    setProcessingState({
-      status: 'detecting',
-      progress: 20,
-      message: 'Analyzing current frame for watermarks...',
-    });
+    setProcessingState({ status: 'detecting', progress: 20, message: 'Memindai watermark di frame ini...' });
+    await new Promise(r => setTimeout(r, 600));
 
-    // Simple detection: look for static regions (common in video watermarks)
-    // We'll check brightness variation — watermarks are often uniform
-    const ctx = frame.getContext('2d')!;
-    const imageData = ctx.getImageData(0, 0, frame.width, frame.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(v, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Check corners
-    const cornerSize = Math.min(frame.width, frame.height) * 0.2;
+    // Smart corner detection
+    const cornerSize = Math.min(canvas.width, canvas.height) * 0.22;
     const corners = [
-      { x: 0, y: 0, name: 'Top-Left' },
-      { x: frame.width - cornerSize, y: 0, name: 'Top-Right' },
-      { x: 0, y: frame.height - cornerSize, name: 'Bottom-Left' },
-      { x: frame.width - cornerSize, y: frame.height - cornerSize, name: 'Bottom-Right' },
+      { x: 0, y: 0, name: 'Kiri Atas' },
+      { x: canvas.width - cornerSize, y: 0, name: 'Kanan Atas' },
+      { x: 0, y: canvas.height - cornerSize, name: 'Kiri Bawah' },
+      { x: canvas.width - cornerSize, y: canvas.height - cornerSize, name: 'Kanan Bawah' },
     ];
 
     let bestCorner = corners[0];
     let bestUniformity = 0;
 
     for (const corner of corners) {
-      let uniformCount = 0;
-      let totalPixels = 0;
-      let meanLum = 0;
+      let uniformCount = 0, totalPixels = 0, meanLum = 0;
 
-      for (let y = corner.y; y < corner.y + cornerSize && y < frame.height; y++) {
-        for (let x = corner.x; x < corner.x + cornerSize && x < frame.width; x++) {
-          const idx = (Math.floor(y) * frame.width + Math.floor(x)) * 4;
+      for (let y = corner.y; y < corner.y + cornerSize && y < canvas.height; y++) {
+        for (let x = corner.x; x < corner.x + cornerSize && x < canvas.width; x++) {
+          const idx = (Math.floor(y) * canvas.width + Math.floor(x)) * 4;
           meanLum += 0.299 * imageData.data[idx] + 0.587 * imageData.data[idx + 1] + 0.114 * imageData.data[idx + 2];
           totalPixels++;
         }
       }
       meanLum /= totalPixels;
 
-      for (let y = corner.y; y < corner.y + cornerSize && y < frame.height; y++) {
-        for (let x = corner.x; x < corner.x + cornerSize && x < frame.width; x++) {
-          const idx = (Math.floor(y) * frame.width + Math.floor(x)) * 4;
+      for (let y = corner.y; y < corner.y + cornerSize && y < canvas.height; y++) {
+        for (let x = corner.x; x < corner.x + cornerSize && x < canvas.width; x++) {
+          const idx = (Math.floor(y) * canvas.width + Math.floor(x)) * 4;
           const lum = 0.299 * imageData.data[idx] + 0.587 * imageData.data[idx + 1] + 0.114 * imageData.data[idx + 2];
           if (Math.abs(lum - meanLum) < 20) uniformCount++;
         }
       }
 
       const uniformity = uniformCount / totalPixels;
-      if (uniformity > bestUniformity) {
-        bestUniformity = uniformity;
-        bestCorner = corner;
-      }
+      if (uniformity > bestUniformity) { bestUniformity = uniformity; bestCorner = corner; }
     }
 
     const region: WatermarkRegion = {
-      id: `video-${Date.now()}`,
-      x: (bestCorner.x / frame.width) * 100,
-      y: (bestCorner.y / frame.height) * 100,
-      width: (cornerSize / frame.width) * 100,
-      height: (cornerSize / frame.height) * 100,
+      id: `vid-${Date.now()}`,
+      x: Math.round((bestCorner.x / canvas.width) * 100),
+      y: Math.round((bestCorner.y / canvas.height) * 100),
+      width: Math.round((cornerSize / canvas.width) * 100),
+      height: Math.round((cornerSize / canvas.height) * 100),
     };
 
-    setProcessingState({
-      status: 'idle',
-      progress: 100,
-      message: `Detected watermark in ${bestCorner.name}. Select processing method.`,
-    });
+    setDetectedRegion(region);
+    setProcessingState({ status: 'idle', progress: 100, message: `Watermark terdeteksi di ${bestCorner.name}! Siap diproses.` });
 
-    onUpdate({
-      ...processedFile,
-      watermarkRegions: [region],
-      processingState: processingState,
-    });
+    onUpdate({ ...processedFile, watermarkRegions: [region] });
 
-    // Draw detection box
+    // Draw box on original
     if (originalCanvasRef.current) {
       const c = originalCanvasRef.current;
+      c.width = canvas.width; c.height = canvas.height;
       const octx = c.getContext('2d')!;
-      octx.strokeStyle = '#3B82F6';
-      octx.lineWidth = 3;
-      octx.setLineDash([6, 3]);
-      octx.strokeRect(
-        (region.x / 100) * c.width,
-        (region.y / 100) * c.height,
-        (region.width / 100) * c.width,
-        (region.height / 100) * c.height
-      );
+      octx.drawImage(v, 0, 0);
+      octx.strokeStyle = '#3B82F6'; octx.lineWidth = 4; octx.setLineDash([8, 4]);
+      octx.strokeRect((region.x/100)*c.width, (region.y/100)*c.height, (region.width/100)*c.width, (region.height/100)*c.height);
     }
   };
 
-  // Process video
-  const handleProcessVideo = async () => {
+  // ===== PROCESS FRAME =====
+  const handleProcessFrame = async () => {
     const regions = processedFile.watermarkRegions;
     if (regions.length === 0) {
-      setProcessingState({
-        status: 'error',
-        progress: 0,
-        message: 'No watermark regions detected. Run detection first.',
-      });
+      setProcessingState({ status: 'error', progress: 0, message: 'Deteksi watermark dulu sebelum proses.' });
       return;
     }
 
-    setProcessingState({
-      status: 'processing',
-      progress: 10,
-      message: 'Processing video... (this may take a while)',
-      estimatedTime: Math.round(file.size / (1024 * 1024)) * 2,
-    });
+    const v = videoRef.current;
+    if (!v) return;
 
-    // For now, we demonstrate the processing pipeline
-    // Full video processing requires FFmpeg.wasm which is heavy for browser
-    // We'll create a preview of the processed frame instead
+    setProcessingState({ status: 'processing', progress: 30, message: 'Memproses frame...' });
+    await new Promise(r => setTimeout(r, 400));
 
-    const video = videoRef.current;
-    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(v, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Process current frame as preview
-    const frameCanvas = captureFrame();
-    if (!frameCanvas) return;
+    setProcessingState({ status: 'processing', progress: 60, message: 'Menghapus watermark...' });
 
-    const ctx = frameCanvas.getContext('2d')!;
-    const imageData = ctx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
-
-    // Apply blur to watermark region
     for (const region of regions) {
-      const rx = Math.floor((region.x / 100) * frameCanvas.width);
-      const ry = Math.floor((region.y / 100) * frameCanvas.height);
-      const rw = Math.floor((region.width / 100) * frameCanvas.width);
-      const rh = Math.floor((region.height / 100) * frameCanvas.height);
-      const blurRadius = Math.max(8, Math.floor(Math.min(rw, rh) * 0.08));
+      const rx = Math.floor((region.x / 100) * canvas.width);
+      const ry = Math.floor((region.y / 100) * canvas.height);
+      const rw = Math.floor((region.width / 100) * canvas.width);
+      const rh = Math.floor((region.height / 100) * canvas.height);
+      const blurRadius = Math.max(6, Math.floor(Math.min(rw, rh) * 0.06));
 
-      for (let y = ry; y < ry + rh && y < frameCanvas.height; y++) {
-        for (let x = rx; x < rx + rw && x < frameCanvas.width; x++) {
+      for (let y = ry; y < ry + rh && y < canvas.height; y++) {
+        for (let x = rx; x < rx + rw && x < canvas.width; x++) {
           let rSum = 0, gSum = 0, bSum = 0, count = 0;
           for (let dy = -blurRadius; dy <= blurRadius; dy++) {
             for (let dx = -blurRadius; dx <= blurRadius; dx++) {
               const nx = x + dx, ny = y + dy;
-              if (nx >= 0 && nx < frameCanvas.width && ny >= 0 && ny < frameCanvas.height) {
-                const idx = (ny * frameCanvas.width + nx) * 4;
-                rSum += imageData.data[idx];
-                gSum += imageData.data[idx + 1];
-                bSum += imageData.data[idx + 2];
+              if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
+                const idx = (ny * canvas.width + nx) * 4;
+                rSum += imageData.data[idx]; gSum += imageData.data[idx + 1]; bSum += imageData.data[idx + 2];
                 count++;
               }
             }
           }
-          const idx = (y * frameCanvas.width + x) * 4;
+          const idx = (y * canvas.width + x) * 4;
           imageData.data[idx] = rSum / count;
           imageData.data[idx + 1] = gSum / count;
           imageData.data[idx + 2] = bSum / count;
@@ -234,340 +190,353 @@ export default function VideoProcessor({
       }
     }
 
+    setProcessingState({ status: 'processing', progress: 90, message: 'Finalisasi...' });
     ctx.putImageData(imageData, 0, 0);
 
-    // Show processed frame
     if (processedCanvasRef.current) {
       const pc = processedCanvasRef.current;
-      pc.width = frameCanvas.width;
-      pc.height = frameCanvas.height;
-      pc.getContext('2d')!.drawImage(frameCanvas, 0, 0);
+      pc.width = canvas.width; pc.height = canvas.height;
+      pc.getContext('2d')!.drawImage(canvas, 0, 0);
     }
 
-    const processedUrl = frameCanvas.toDataURL('image/png');
+    const processedUrl = canvas.toDataURL('image/png');
+    setProcessedFrameUrl(processedUrl);
+    setActiveTab('result');
 
-    setProcessingState({
-      status: 'done',
-      progress: 100,
-      message: '✅ Frame processed! For full video, download the FFmpeg processing script.',
-    });
+    setProcessingState({ status: 'done', progress: 100, message: '✅ Frame berhasil diproses! Download frame atau skrip full video.' });
 
-    onUpdate({
-      ...processedFile,
-      processedUrl: processedUrl,
-      processingState: {
-        status: 'done',
-        progress: 100,
-        message: 'Preview ready. Full video processing requires offline script.',
-      },
-    });
+    onUpdate({ ...processedFile, processedUrl, processingState: { status: 'done', progress: 100, message: 'Preview siap. Untuk full video gunakan skrip offline.' } });
   };
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      drawCurrentFrame();
-    }
+    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
   };
 
   const togglePlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
+    if (!videoRef.current) return;
+    isPlaying ? videoRef.current.pause() : videoRef.current.play();
+    setIsPlaying(!isPlaying);
+  };
+
+  const stepFrame = (dir: 1 | -1) => {
+    if (videoRef.current) videoRef.current.currentTime += dir / 30;
+  };
+
+  const handleDownloadFrame = () => {
+    if (processedFrameUrl) {
+      const a = document.createElement('a');
+      a.href = processedFrameUrl;
+      a.download = `frame_${file.name.replace(/\.[^.]+$/, '.png')}`;
+      a.click();
     }
   };
 
-  const stepFrame = (direction: 'forward' | 'backward') => {
-    if (videoRef.current) {
-      videoRef.current.currentTime += direction === 'forward' ? 1 / 30 : -1 / 30;
-    }
+  const handleDownloadScript = () => {
+    const regions = processedFile.watermarkRegions;
+    const w = videoRef.current?.videoWidth || 1920;
+    const h = videoRef.current?.videoHeight || 1080;
+    const regionsStr = JSON.stringify(regions, null, 2);
+
+    const script = `#!/usr/bin/env python3
+"""
+Video Watermark Removal Script — Generated by MencakMencak
+"""
+import subprocess, json, os
+
+INPUT = "${file.name}"
+OUTPUT = "bersih_${file.name}"
+REGIONS = ${regionsStr}
+W, H = ${w}, ${h}
+
+def create_filter():
+    parts = []
+    for i, r in enumerate(REGIONS):
+        x = int(r['x']/100*W); y = int(r['y']/100*H)
+        w = int(r['width']/100*W); h = int(r['height']/100*H)
+        if w%2: w+=1; if h%2: h+=1
+        parts.append(f"[0:v]crop={w}:{h}:{x}:{y},boxblur=10:10[blur{i}];[0:v][blur{i}]overlay={x}:{y}[tmp{i}]")
+    if len(parts)==1: return parts[0].replace("[tmp0]","[vout]")
+    chain=parts[0]
+    for i,p in enumerate(parts[1:],1):
+        chain+=p.replace("[0:v]",f"[tmp{i-1}]").replace(f"[tmp{i}]","[vout]" if i==len(parts)-1 else f"[tmp{i}]")
+    return chain
+
+subprocess.run(['ffmpeg','-i',INPUT,'-filter_complex',create_filter(),'-map','[vout]','-map','0:a?','-c:v','libx264','-crf','18','-c:a','copy','-y',OUTPUT], check=True)
+print(f"Done: {OUTPUT}")
+`;
+
+    const blob = new Blob([script], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'proses_video.py';
+    a.click();
   };
 
+  // ============================================
+  // RENDER
+  // ============================================
   return (
-    <div className="space-y-6">
-      <ProgressBar state={processingState} />
-
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={handleDetectInFrame}
-          disabled={!videoLoaded || processingState.status === 'detecting' || processingState.status === 'processing'}
-          className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-medium
-            hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed
-            transition-all shadow-lg shadow-blue-500/25 flex items-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          Detect in Current Frame
-        </button>
-
-        <select
-          value={processingMethod}
-          onChange={(e) => setProcessingMethod(e.target.value as any)}
-          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="overlay-blur">🌫️ Blur Overlay (Fast)</option>
-          <option value="frame-replace">🖼️ Frame-by-Frame (Slow, Better)</option>
-        </select>
-
-        <button
-          onClick={handleProcessVideo}
-          disabled={
-            !videoLoaded ||
-            processedFile.watermarkRegions.length === 0 ||
-            processingState.status === 'processing' ||
-            processingState.status === 'detecting'
-          }
-          className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium
-            hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed
-            transition-all shadow-lg shadow-green-500/25 flex items-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Process Frame Preview
-        </button>
-
-        <button
-          onClick={onReset}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors ml-auto"
-        >
-          New File
-        </button>
+    <div style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>
+      {/* STATUS CARD */}
+      <div style={{
+        padding: '14px 20px', borderRadius: 16,
+        marginBottom: 20, textAlign: 'center',
+        background: isError ? '#fef2f2' : isDone ? '#f0fdf4' : videoLoaded ? '#f8fafc' : '#fafafa',
+        border: isError ? '1px solid #fecaca' : isDone ? '1px solid #bbf7d0' : '1px solid #f0f0f0',
+      }}>
+        {!videoLoaded && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid #e5e7eb', borderTopColor: '#3b82f6', animation: 'spin 0.7s linear infinite' }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>Memuat video...</span>
+          </div>
+        )}
+        {isError && (
+          <div>
+            <span style={{ fontSize: 32 }}>⚠️</span>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', margin: '4px 0' }}>{processingState.message}</p>
+          </div>
+        )}
+        {videoLoaded && !isError && (
+          <div>
+            {isBusy ? (
+              <div>
+                <div style={{ width: '100%', height: 6, background: '#f0f0f0', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ height: '100%', width: `${processingState.progress}%`, background: 'linear-gradient(90deg,#3b82f6,#6366f1)', borderRadius: 3, transition: 'width 0.3s' }} />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#2563eb' }}>{processingState.message}</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 15 }}>{isDone ? '✅' : '🎬'}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: isDone ? '#16a34a' : '#333' }}>{processingState.message || 'Pilih frame & deteksi watermark'}</span>
+                {hasRegions && !isDone && (
+                  <span style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>1 area</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Video Player */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Original Video */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">📹 Original Video</h3>
-          <div className="relative border-2 border-gray-200 rounded-xl overflow-hidden bg-black">
-            <video
-              ref={videoRef}
-              src={previewUrl || ''}
-              className="w-full max-h-[400px] object-contain"
-              onLoadedMetadata={handleVideoLoad}
-              onTimeUpdate={handleTimeUpdate}
-            />
+      {/* TOOLBAR */}
+      {videoLoaded && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10,
+          marginBottom: 20, padding: '14px 18px',
+          background: '#fff', borderRadius: 14, border: '1px solid #f0f0f0',
+        }}>
+          <button onClick={handleDetectInFrame} disabled={isBusy} style={{
+            padding: '11px 20px', display: 'flex', alignItems: 'center', gap: 7,
+            background: isBusy ? '#e5e7eb' : 'linear-gradient(135deg,#2563eb,#6366f1)',
+            color: isBusy ? '#999' : 'white', border: 'none', borderRadius: 11,
+            fontSize: 14, fontWeight: 700, cursor: isBusy ? 'not-allowed' : 'pointer',
+            boxShadow: isBusy ? 'none' : '0 4px 14px rgba(37,99,235,0.25)',
+          }}>🔍 Deteksi di Frame Ini</button>
 
-            {/* Video Controls */}
-            <div className="bg-gray-900 p-3 flex items-center gap-3">
-              <button onClick={togglePlay} className="text-white hover:text-blue-400">
-                {isPlaying ? (
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
+          <select value={processingMethod} onChange={e => setProcessingMethod(e.target.value as any)}
+            disabled={isBusy} style={{
+              padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 10,
+              fontSize: 13, fontWeight: 600, color: '#333', background: '#fff',
+              cursor: 'pointer', outline: 'none',
+            }}>
+            <option value="overlay-blur">🌫️ Blur Overlay (Cepat)</option>
+            <option value="frame-replace">🖼️ Frame-by-Frame (Lambat, Optimal)</option>
+          </select>
 
-              <button onClick={() => stepFrame('backward')} className="text-white hover:text-blue-400">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8.445 14.832A1 1 0 0010 14v-2.798l5.445 3.63A1 1 0 0017 14V6a1 1 0 00-1.555-.832L10 8.798V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z" />
-                </svg>
-              </button>
+          <button onClick={handleProcessFrame} disabled={!hasRegions || isBusy} style={{
+            padding: '11px 20px', display: 'flex', alignItems: 'center', gap: 7,
+            background: (!hasRegions || isBusy) ? '#e5e7eb' : 'linear-gradient(135deg,#16a34a,#22c55e)',
+            color: (!hasRegions || isBusy) ? '#999' : 'white', border: 'none', borderRadius: 11,
+            fontSize: 14, fontWeight: 700, cursor: (!hasRegions || isBusy) ? 'not-allowed' : 'pointer',
+            boxShadow: (!hasRegions || isBusy) ? 'none' : '0 4px 14px rgba(22,163,74,0.25)',
+          }}>🎯 Proses Frame</button>
 
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={currentTime}
-                onChange={(e) => {
-                  if (videoRef.current) {
-                    videoRef.current.currentTime = parseFloat(e.target.value);
-                    setCurrentTime(parseFloat(e.target.value));
-                  }
-                }}
-                className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+          <div style={{ flex: 1 }} />
+
+          <button onClick={onReset} style={{
+            padding: '10px 16px', background: '#f3f4f6', color: '#555',
+            border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>📁 File Baru</button>
+        </div>
+      )}
+
+      {/* MAIN CONTENT — Video Player + Processed */}
+      {videoLoaded && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+          {/* Video Player */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#333' }}>🎬 Video Asli</span>
+              {detectedRegion && (
+                <span style={{ fontSize: 11, background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>Terdeteksi</span>
+              )}
+            </div>
+            <div style={{ border: detectedRegion ? '2px solid #93c5fd' : '2px solid #e5e7eb', borderRadius: 14, overflow: 'hidden', background: '#000' }}>
+              <video ref={videoRef} src={previewUrl || ''}
+                style={{ width: '100%', maxHeight: 400, display: 'block' }}
+                onLoadedMetadata={handleVideoLoad}
+                onTimeUpdate={handleTimeUpdate}
+                onSeeked={handleThumbnail}
               />
 
-              <button onClick={() => stepFrame('forward')} className="text-white hover:text-blue-400">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L10 11.202V14a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4A1 1 0 0010 6v2.798L4.555 5.168z" />
-                </svg>
-              </button>
+              {/* Controls */}
+              <div style={{ background: '#111', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={togglePlay} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0 }}>
+                  {isPlaying ? (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+                  ) : (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+                  )}
+                </button>
 
-              <span className="text-white text-xs font-mono">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
+                <button onClick={() => stepFrame(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', padding: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#aaa"><path d="M11 7l-5 5 5 5V7zm7 0l-5 5 5 5V7z"/></svg>
+                </button>
+
+                <input type="range" min={0} max={duration || 100} step={0.1} value={currentTime}
+                  onChange={e => { if (videoRef.current) { videoRef.current.currentTime = parseFloat(e.target.value); setCurrentTime(parseFloat(e.target.value)); } }}
+                  style={{ flex: 1, height: 4, accentColor: '#3b82f6' }}
+                />
+
+                <button onClick={() => stepFrame(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', padding: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#aaa"><path d="M6 7l5 5-5 5V7zm7 0l5 5-5 5V7z"/></svg>
+                </button>
+
+                <span style={{ color: '#aaa', fontSize: 12, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                  {fmtTime(currentTime)} / {fmtTime(duration)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Processed Frame */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#333' }}>✨ Hasil Frame</span>
+                {isDone && <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>Selesai</span>}
+              </div>
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: 4, background: '#f3f4f6', borderRadius: 8, padding: 3 }}>
+                {(['preview','result'] as const).map(t => (
+                  <button key={t} onClick={() => setActiveTab(t)} style={{
+                    padding: '5px 14px', borderRadius: 6, border: 'none',
+                    background: activeTab === t ? '#fff' : 'transparent',
+                    color: activeTab === t ? '#333' : '#888',
+                    fontWeight: activeTab === t ? 700 : 500, fontSize: 12, cursor: 'pointer',
+                    boxShadow: activeTab === t ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  }}>{t === 'preview' ? 'Preview' : 'Hasil'}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ border: isDone ? '2px solid #bbf7d0' : '2px solid #e5e7eb', borderRadius: 14, overflow: 'hidden', background: '#fafafa', minHeight: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {activeTab === 'preview' ? (
+                <canvas ref={originalCanvasRef} style={{ maxWidth: '100%', maxHeight: '70vh' }} />
+              ) : (
+                <>
+                  <canvas ref={processedCanvasRef} style={{ maxWidth: '100%', maxHeight: '70vh' }} />
+                  {!isDone && !isBusy && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.7)' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: '#888', margin: 0 }}>Proses frame untuk lihat preview</p>
+                      </div>
+                    </div>
+                  )}
+                  {isBusy && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.6)' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ width: 32, height: 32, margin: '0 auto 8px', borderRadius: '50%', border: '3px solid #e5e7eb', borderTopColor: '#3b82f6', animation: 'spin 0.7s linear infinite' }} />
+                        <p style={{ fontSize: 13, fontWeight: 600, color: '#333', margin: 0 }}>{processingState.message}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
+      )}
 
-        {/* Processed Frame */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">
-            ✨ Processed Frame Preview
-            {processingState.status === 'done' && (
-              <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full ml-2">
-                Preview Ready
-              </span>
-            )}
-          </h3>
-          <div className="relative border-2 border-green-200 rounded-xl overflow-hidden bg-gray-50">
-            <canvas ref={processedCanvasRef} className="max-w-full h-auto" />
-            {processingState.status === 'processing' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <div className="text-center bg-white/90 px-6 py-4 rounded-xl">
-                  <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
-                  <p className="text-sm text-gray-700">{processingState.message}</p>
+      {/* DOWNLOAD SECTION */}
+      {isDone && (
+        <div style={{ textAlign: 'center', marginTop: 24 }}>
+          <div style={{
+            display: 'inline-flex', flexDirection: 'column', gap: 12,
+            padding: '20px 28px', background: '#fff', borderRadius: 16,
+            border: '1px solid #f0f0f0', boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
+            minWidth: 340, maxWidth: '100%',
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>⬇️ Download</div>
+
+            {/* Thumbnail */}
+            {thumbUrl && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px', background: '#fafafa', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+                <canvas ref={thumbCanvasRef} style={{ width: 80, height: 45, borderRadius: 6 }} />
+                <div style={{ textAlign: 'left', fontSize: 12, color: '#666' }}>
+                  <div style={{ fontWeight: 700, color: '#333' }}>{file.name}</div>
+                  <div>{formatFileSize(file.size)} · {fmtTime(duration)}</div>
                 </div>
               </div>
             )}
-            {processingState.status !== 'done' && processingState.status !== 'processing' && (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
-                Process a frame to see preview
-              </div>
-            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={handleDownloadFrame} style={{
+                padding: '13px 24px', background: 'linear-gradient(135deg,#2563eb,#6366f1)',
+                color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+              }}>🖼️ Download Frame</button>
+
+              <button onClick={handleDownloadScript} style={{
+                padding: '13px 24px', background: '#fff', color: '#333',
+                border: '2px solid #e5e7eb', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+              }}>🐍 Skrip Python</button>
+            </div>
+
+            <p style={{ fontSize: 11, color: '#aaa', margin: 0, lineHeight: 1.5 }}>
+              📝 Untuk full video, download skrip Python & jalankan dengan FFmpeg di komputer.
+            </p>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Watermark Region Canvas (hidden, for detection) */}
-      <canvas ref={originalCanvasRef} className="hidden" />
+      {/* FULL VIDEO NOTE */}
+      {videoLoaded && (
+        <div style={{
+          marginTop: 20, padding: '16px 20px',
+          background: '#fefce8', border: '1px solid #fef08a', borderRadius: 14,
+          fontSize: 13, color: '#854d0e', lineHeight: 1.6,
+        }}>
+          <strong style={{ display: 'block', marginBottom: 4 }}>📝 Pemrosesan Full Video</strong>
+          Pemrosesan video full memerlukan FFmpeg di komputer. Deteksi watermark di frame ini, proses preview, lalu download skrip Python untuk memproses video lengkap dengan frame-by-frame inpainting.
+        </div>
+      )}
 
-      {/* Offline Processing Note */}
-      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
-        <p className="font-semibold mb-1">📝 Full Video Processing</p>
-        <p>
-          Full video watermark removal requires offline processing with FFmpeg.
-          Download the Python processing script below for complete video processing with frame-by-frame inpainting.
-        </p>
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            downloadVideoScript(file.name, processedFile.watermarkRegions, processingMethod, videoRef.current?.videoWidth || 1920, videoRef.current?.videoHeight || 1080);
-          }}
-          className="inline-block mt-2 text-blue-600 hover:text-blue-800 underline font-medium"
-        >
-          📥 Download Video Processing Script
-        </a>
-      </div>
+      {/* FILE INFO */}
+      {videoLoaded && (
+        <div style={{
+          marginTop: 16, padding: '10px 20px', background: '#fafafa',
+          borderRadius: 12, border: '1px solid #f0f0f0',
+          display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center',
+          fontSize: 12, color: '#888',
+        }}>
+          <span>📄 {file.name}</span>
+          <span>📦 {formatFileSize(file.size)}</span>
+          <span>⏱️ {fmtTime(duration)}</span>
+          <span>🎞️ Frame: {currentTime.toFixed(1)}s</span>
+          <span>🔧 {processingMethod === 'overlay-blur' ? 'Blur' : 'FbF'}</span>
+        </div>
+      )}
 
-      {/* File Info */}
-      <div className="text-xs text-gray-400 text-center space-x-4">
-        <span>File: {file.name}</span>
-        <span>Size: {formatFileSize(file.size)}</span>
-        <span>Duration: {formatTime(duration)}</span>
-        <span>Frame: {currentTime.toFixed(1)}s</span>
-      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function downloadVideoScript(
-  filename: string,
-  regions: WatermarkRegion[],
-  method: string,
-  width: number,
-  height: number
-) {
-  const regionsStr = JSON.stringify(regions, null, 2);
-  const script = `#!/usr/bin/env python3
-"""
-Video Watermark Removal Script
-Generated by Watermark Remover Tool
-"""
-
-import subprocess
-import json
-import os
-import tempfile
-from pathlib import Path
-
-# Configuration
-INPUT_FILE = "${filename}"
-OUTPUT_FILE = "cleaned_${filename}"
-REGIONS = ${regionsStr}
-VIDEO_WIDTH = ${width}
-VIDEO_HEIGHT = ${height}
-METHOD = "${method}"
-
-def create_blur_region(width, height, regions):
-    """Create FFmpeg filter for blurring watermark regions"""
-    filters = []
-    for i, region in enumerate(regions):
-        x = int(region['x'] / 100 * width)
-        y = int(region['y'] / 100 * height)
-        w = int(region['width'] / 100 * width)
-        h = int(region['height'] / 100 * height)
-        # Ensure even dimensions for some codecs
-        w = w if w % 2 == 0 else w + 1
-        h = h if h % 2 == 0 else h + 1
-
-        filters.append(
-            f"[0:v]crop={w}:{h}:{x}:{y},boxblur=10:10[blur{i}];"
-            f"[0:v][blur{i}]overlay={x}:{y}[tmp{i}]"
-        )
-
-    # Chain filters
-    if len(filters) == 1:
-        return filters[0].replace("[tmp0]", "[vout]")
-    else:
-        chain = ""
-        for i, f in enumerate(filters):
-            if i == 0:
-                chain += f
-            else:
-                chain += f.replace("[0:v]", f"[tmp{i-1}]").replace(f"[tmp{i}]", "[vout]" if i == len(filters)-1 else f"[tmp{i}]")
-        return chain
-
-def process_with_ffmpeg():
-    """Process video using FFmpeg with blur overlay"""
-    print("Processing video with FFmpeg blur overlay...")
-
-    filter_complex = create_blur_region(VIDEO_WIDTH, VIDEO_HEIGHT, REGIONS)
-
-    cmd = [
-        'ffmpeg', '-i', INPUT_FILE,
-        '-filter_complex', filter_complex,
-        '-map', '[vout]',
-        '-map', '0:a?',  # Copy audio if exists
-        '-c:v', 'libx264',
-        '-crf', '18',
-        '-preset', 'medium',
-        '-c:a', 'copy',
-        '-y', OUTPUT_FILE
-    ]
-
-    print(f"Running: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True)
-    print(f"Done! Output saved to: {OUTPUT_FILE}")
-
-if __name__ == '__main__':
-    if not os.path.exists(INPUT_FILE):
-        print(f"Error: Input file '{INPUT_FILE}' not found.")
-        print("Place this script in the same directory as your video file.")
-        exit(1)
-
-    process_with_ffmpeg()
-`;
-
-  const blob = new Blob([script], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'process_video.py';
-  a.click();
-  URL.revokeObjectURL(url);
+function fmtTime(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
 }
