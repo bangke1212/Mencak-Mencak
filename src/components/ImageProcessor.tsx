@@ -100,10 +100,26 @@ export default function ImageProcessor({
             const newUrl = URL.createObjectURL(converted);
             tryLoadImage(newUrl, originalFile, true);
           } else {
-            setProcessingState({
-              status: 'error', progress: 0,
-              message: 'Format tidak didukung browser. Konversi ke PNG/JPG dulu.',
-            });
+            // Canvas conversion also failed — try raw bytes approach
+            console.warn('Canvas conversion also failed, trying raw buffer load...');
+            try {
+              const rawConverted = await convertViaRawBytes(originalFile);
+              if (rawConverted) {
+                convertedFileRef.current = rawConverted;
+                const newUrl = URL.createObjectURL(rawConverted);
+                tryLoadImage(newUrl, originalFile, true);
+              } else {
+                setProcessingState({
+                  status: 'error', progress: 0,
+                  message: 'Format tidak didukung browser. Konversi ke PNG/JPG dulu.',
+                });
+              }
+            } catch {
+              setProcessingState({
+                status: 'error', progress: 0,
+                message: 'Format tidak didukung browser. Konversi ke PNG/JPG dulu.',
+              });
+            }
           }
         } catch {
           setProcessingState({
@@ -154,6 +170,67 @@ export default function ImageProcessor({
       };
 
       img.src = url;
+    });
+  }
+
+  // ===== CONVERT VIA RAW BYTES (last resort for corrupt headers) =====
+  async function convertViaRawBytes(inputFile: File): Promise<File | null> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer);
+        
+        // Try to detect if this looks like JPEG/PNG/GIF/BMP/WEBP from magic bytes
+        const isJPEG = bytes[0] === 0xFF && bytes[1] === 0xD8;
+        const isPNG  = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+        const isGIF  = bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+        const isBMP  = bytes[0] === 0x42 && bytes[1] === 0x4D;
+        const isWEBP = bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+        
+        if (isJPEG || isPNG || isGIF || isBMP || isWEBP) {
+          // Valid image magic bytes — try as blob
+          const mimeMap: Record<string, string> = {
+            jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+            bmp: 'image/bmp', webp: 'image/webp',
+          };
+          let mime = 'image/png';
+          if (isJPEG) mime = 'image/jpeg';
+          else if (isGIF) mime = 'image/gif';
+          else if (isBMP) mime = 'image/bmp';
+          else if (isWEBP) mime = 'image/webp';
+          
+          const blob = new Blob([bytes], { type: mime });
+          const name = inputFile.name.replace(/\.[^.]+$/, '.png') || 'recovered.png';
+          const file = new File([blob], name, { type: mime });
+          
+          // Now try to load via canvas
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || 800;
+            canvas.height = img.naturalHeight || 600;
+            canvas.getContext('2d')!.drawImage(img, 0, 0);
+            canvas.toBlob((pngBlob) => {
+              URL.revokeObjectURL(url);
+              if (pngBlob && pngBlob.size > 0) {
+                resolve(new File([pngBlob], name, { type: 'image/png' }));
+              } else {
+                resolve(null);
+              }
+            }, 'image/png');
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(null);
+          };
+          img.src = url;
+        } else {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsArrayBuffer(inputFile);
     });
   }
 
