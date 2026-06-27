@@ -366,6 +366,54 @@ export default function ImageProcessor({
     }
   };
 
+  // ===== UPSCALE TO 4K =====
+  const [upscaling, setUpscaling] = useState(false);
+  const [upscaleScale, setUpscaleScale] = useState<2 | 4>(4);
+  const [upscaledUrl, setUpscaledUrl] = useState<string | null>(null);
+
+  const handleUpscale = async () => {
+    if (!processedFile.processedUrl) return;
+    setUpscaling(true);
+    setUpscaledUrl(null);
+    setProcessingState({ status: 'removing', progress: 0, message: `Upscaling ke ${upscaleScale}×...` });
+
+    try {
+      const res = await fetch('/api/upscale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: processedFile.processedUrl, scale: upscaleScale }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setUpscaledUrl(data.resultBase64);
+        setProcessingState({
+          status: 'done',
+          progress: 100,
+          message: data.newWidth
+            ? `✅ Upscale ${upscaleScale}× berhasil! (${data.newWidth}×${data.newHeight})`
+            : '✅ Gambar siap diunduh.',
+        });
+      } else {
+        throw new Error(data.error || 'Gagal');
+      }
+    } catch (err: any) {
+      setProcessingState({ status: 'error', progress: 0, message: `Upscale gagal: ${err.message}. Coba client-side.` });
+    } finally {
+      setUpscaling(false);
+    }
+  };
+
+  const handleDownloadUpscaled = () => {
+    const url = upscaledUrl || processedFile.processedUrl;
+    if (url) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `4k_cleaned_${getUsableFile().name.replace(/\.[^.]+$/, '.jpg')}`;
+      a.click();
+    }
+  };
+
   const isBusy = processingState.status === 'detecting' || processingState.status === 'removing';
   const isDone = processingState.status === 'done';
   const isError = processingState.status === 'error';
@@ -636,17 +684,90 @@ export default function ImageProcessor({
         </div>
       )}
 
-      {/* DOWNLOAD */}
+      {/* DOWNLOAD + UPSCALE */}
       {isDone && processedFile.processedUrl && (
         <div style={{ textAlign: 'center', marginTop: 24 }}>
-          <button onClick={handleDownload} style={{
-            padding: '16px 36px',
-            background: 'linear-gradient(135deg,#8b5cf6,#ec4899)',
-            color: 'white', border: 'none', borderRadius: 14,
-            fontSize: 16, fontWeight: 700, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            boxShadow: '0 6px 24px rgba(139,92,246,0.3)',
-          }}>⬇️ Download Gambar Bersih</button>
+          {/* Upscale Panel */}
+          <div style={{
+            display: 'inline-flex', flexDirection: 'column', gap: 12,
+            padding: '20px 28px',
+            background: '#fff', borderRadius: 16,
+            border: '1px solid #f0f0f0',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
+            minWidth: 380, maxWidth: '100%',
+          }}>
+            {/* Label */}
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>
+              ⚡ Tingkatkan Kualitas ke 4K
+            </div>
+
+            {/* Scale selector */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+              {([2, 4] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setUpscaleScale(s)}
+                  disabled={upscaling}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: 10,
+                    border: upscaleScale === s ? '2px solid #3b82f6' : '2px solid #e5e7eb',
+                    background: upscaleScale === s ? '#eff6ff' : '#fff',
+                    color: upscaleScale === s ? '#2563eb' : '#888',
+                    fontSize: 13, fontWeight: 700, cursor: upscaling ? 'default' : 'pointer',
+                  }}
+                >
+                  {s}× Upscale
+                </button>
+              ))}
+            </div>
+
+            {/* Upscale info */}
+            <div style={{
+              fontSize: 11, color: '#999',
+              background: '#fafafa', borderRadius: 8, padding: '8px 14px',
+            }}>
+              {upscaleScale === 4
+                ? `Output ~${(originalDimensions.w * 4)}×${(originalDimensions.h * 4)} px (4K)`
+                : `Output ~${(originalDimensions.w * 2)}×${(originalDimensions.h * 2)} px (2K)`
+              }
+              {' · '}Lanczos + Sharpen
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={handleUpscale} disabled={upscaling} style={{
+                padding: '13px 28px',
+                background: upscaling ? '#e5e7eb' : 'linear-gradient(135deg,#2563eb,#6366f1)',
+                color: upscaling ? '#999' : 'white', border: 'none', borderRadius: 12,
+                fontSize: 14, fontWeight: 700, cursor: upscaling ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+                boxShadow: upscaling ? 'none' : '0 4px 14px rgba(37,99,235,0.3)',
+              }}>
+                {upscaling ? '⏳ Upscaling...' : `🆙 Upscale ke ${upscaleScale}×`}
+              </button>
+
+              <button onClick={upscaledUrl ? handleDownloadUpscaled : handleDownload} style={{
+                padding: '13px 28px',
+                background: 'linear-gradient(135deg,#8b5cf6,#ec4899)',
+                color: 'white', border: 'none', borderRadius: 12,
+                fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+                boxShadow: '0 4px 14px rgba(139,92,246,0.3)',
+              }}>
+                ⬇️ Download {upscaledUrl ? '4K' : 'Asli'}
+              </button>
+            </div>
+
+            {upscaledUrl && (
+              <div style={{
+                fontSize: 12, fontWeight: 600, color: '#16a34a',
+                background: '#f0fdf4', borderRadius: 8, padding: '6px 12px',
+              }}>
+                ✅ Upscale selesai! Klik Download 4K di atas.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
