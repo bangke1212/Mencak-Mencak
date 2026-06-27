@@ -5,6 +5,7 @@ import { FileType } from '@/types';
 
 interface Props {
   onSelect: (file: File, type: FileType) => void;
+  activeTab?: 'images' | 'videos';
 }
 
 /* ============================================================
@@ -150,7 +151,7 @@ function generateVideoSample(sample: typeof VIDEO_SAMPLES[0]): Promise<File> {
 /* ============================================================
    COMPONENT
    ============================================================ */
-export default function SampleFiles({ onSelect }: Props) {
+export default function SampleFiles({ onSelect, activeTab = 'images' }: Props) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
 
@@ -197,11 +198,13 @@ export default function SampleFiles({ onSelect }: Props) {
   return (
     <div style={{ marginTop: 8 }}>
       <p style={{ fontSize: 13, color: '#999', textAlign: 'center', marginBottom: 6, fontWeight: 500 }}>
-        No file? Try these samples:
+        Tidak ada file? Coba sample ini:
       </p>
 
       {/* --- IMAGE SAMPLES --- */}
-      <p style={{ fontSize: 11, color: '#bbb', marginBottom: 6, fontWeight: 600 }}>🖼️ Images</p>
+      {activeTab === 'images' && (
+      <>
+      <p style={{ fontSize: 11, color: '#bbb', marginBottom: 6, fontWeight: 600 }}>🖼️ Gambar</p>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
@@ -237,9 +240,13 @@ export default function SampleFiles({ onSelect }: Props) {
           );
         })}
       </div>
+      </>
+      )}
 
       {/* --- VIDEO SAMPLES --- */}
-      <p style={{ fontSize: 11, color: '#bbb', marginBottom: 6, fontWeight: 600 }}>🎬 Videos</p>
+      {activeTab === 'videos' && (
+      <>
+      <p style={{ fontSize: 11, color: '#bbb', marginBottom: 6, fontWeight: 600 }}>🎬 Video</p>
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
@@ -274,6 +281,8 @@ export default function SampleFiles({ onSelect }: Props) {
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 }

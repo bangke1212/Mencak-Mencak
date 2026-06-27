@@ -2,14 +2,26 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Watermark Remover - AI-Powered Image & Video Watermark Removal',
+  title: 'Mencak-Mencak - Hapus Watermark Gambar & Video Gratis | AI Otomatis',
   description:
-    'Remove watermarks from images and videos automatically using AI. Supports all image and video formats, up to 50MB. Free, fast, and no sign-up required.',
-  keywords: 'watermark remover, remove watermark, AI inpainting, video watermark removal, image watermark remover, free watermark remover',
+    'Hapus watermark dari gambar dan video secara otomatis pakai AI. Gratis selamanya, tanpa daftar. Support PNG, JPG, WEBP, HEIC, MP4 dan 20+ format. Upscale hingga 4K.',
+  keywords: 'hapus watermark, remove watermark, AI watermark remover, hapus watermark gratis, free watermark remover, AI inpainting, upscale 4K, menghilangkan watermark',
+  metadataBase: new URL('https://mencak-mencak.vercel.app'),
   openGraph: {
-    title: 'Watermark Remover - AI-Powered Image & Video Watermark Removal',
-    description: 'Remove watermarks from images and videos automatically using AI.',
+    title: 'Mencak-Mencak - Hapus Watermark Gambar & Video Gratis',
+    description: 'Hapus watermark otomatis dengan AI. Gratis, tanpa daftar, tanpa batas.',
     type: 'website',
+    locale: 'id_ID',
+    siteName: 'Mencak-Mencak',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Mencak-Mencak - Hapus Watermark Otomatis',
+    description: 'Hapus watermark gambar & video gratis pakai AI.',
+  },
+  robots: 'index, follow',
+  alternates: {
+    canonical: 'https://mencak-mencak.vercel.app',
   },
 };
 
@@ -19,8 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 antialiased">
+    <html lang="id">
+      <body className="min-h-screen antialiased" style={{background:'#fafbfc',fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
         {children}
       </body>
     </html>
