@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
     const image = sharp(buffer);
     const metadata = await image.metadata();
     
-    const newWidth = (metadata.width || 800) * factor;
-    const newHeight = (metadata.height || 600) * factor;
+    const newWidth = Math.round((metadata.width || 800) * factor);
+    const newHeight = Math.round((metadata.height || 600) * factor);
 
     const result = await image
       .resize(newWidth, newHeight, {
